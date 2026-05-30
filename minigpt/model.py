@@ -2,6 +2,43 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class Head(nn.Module):
+    def __init__(self, n_embd, head_size, block_size):
+        super().__init__()
+
+        self.key = nn.Linear(n_embd, head_size, bias = False)
+        self.query = nn.Linear(n_embd, head_size, bias = False)
+        self.value = nn.Linear(n_embd, head_size, bias = False)
+
+        self.register_buffer(
+            "tril",
+            torch.tril(torch.ones(block_size, block_size))
+        )
+    def forward(self, x):
+        B, T, C = x.shape
+
+        k = self.key(x)
+        q = self.query(x)
+        v = self.value(x)
+
+        wei = q @ k.transpose(-2,-1)
+
+        # scale
+        head_size = k.shape[-1]
+        wei = wei * head_size ** -0.5
+
+        # mask
+        wei = wei.masked_fill(
+            self.tril[:T, :T] == 0,
+            float("-inf")
+        )
+        
+        wei = F.softmax(wei, dim=-1)
+
+        # 用注意力权重 wei 对 v 做加权求和
+        out = wei @ v
+
+        return out
 
 class BigramLanguageModel(nn.Module):
     def __init__(self, vocab_size,n_embd,block_size):
@@ -11,6 +48,10 @@ class BigramLanguageModel(nn.Module):
 
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
+
+        # 单头注意力模块
+        self.sa_head = Head(n_embd, n_embd, block_size)
+
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets = None):
@@ -22,6 +63,8 @@ class BigramLanguageModel(nn.Module):
         pos_emb = self.position_embedding_table(pos)
 
         x = tok_emb + pos_emb
+
+        x = self.sa_head(x)
 
         logits = self.lm_head(x)
 
@@ -123,3 +166,17 @@ if __name__ == "__main__":
     print("generated shape:", generated.shape)
     print("generated ids:", generated)
     print("generated text:", tokenizer.decode(generated[0].tolist()))
+
+    B = 4
+    T = 8
+    n_embd = 32
+    head_size = 16
+    block_size = 8
+
+    x = torch.randn(B, T, n_embd)
+
+    head = Head(n_embd, head_size, block_size)
+
+    out = head(x)
+
+    print("out shape:", out.shape)
