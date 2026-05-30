@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 from minigpt.dataset import get_batch
-from minigpt.model import BigramLanguageModel
+from minigpt.model import GPTLanguageModel
 from minigpt.tokenizer import CharTokenizer
 
 data_dir = ROOT / "data" / "tiny_text"
@@ -32,7 +32,7 @@ block_size = 8
 
 n_embd = 32
 
-model = BigramLanguageModel(tokenizer.vocab_size,n_embd)
+model = GPTLanguageModel(tokenizer.vocab_size,n_embd)
 
 x, y = get_batch(
     split="train",

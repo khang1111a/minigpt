@@ -92,8 +92,8 @@ class Block(nn.Module):
 
         return x
 
-class BigramLanguageModel(nn.Module):
-    def __init__(self, vocab_size, n_embd, block_size, num_heads):
+class GPTLanguageModel(nn.Module):
+    def __init__(self, vocab_size, n_embd, block_size, num_heads, n_layer):
         super().__init__()
 
         self.block_size = block_size
@@ -115,7 +115,10 @@ class BigramLanguageModel(nn.Module):
         #self.ln2 = nn.LayerNorm(n_embd)
 
         # transformer block
-        self.block = Block(n_embd, num_heads, block_size)
+        self.blocks = nn.Sequential(*[
+            Block(n_embd, num_heads, block_size)
+            for _ in range(n_layer)
+        ])
 
         self.ln_f = nn.LayerNorm(n_embd)
 
@@ -134,7 +137,7 @@ class BigramLanguageModel(nn.Module):
         #x = x + self.sa_head(self.ln1(x))
         #x = x + self.ffwd(self.ln2(x))
 
-        x = self.block(x)
+        x = self.blocks(x)
 
         x = self.ln_f(x)
 
@@ -207,8 +210,9 @@ if __name__ == "__main__":
 
     n_embd = 32
     num_heads = 4
+    n_layer = 2
 
-    model = BigramLanguageModel(vocab_size,n_embd,block_size,num_heads)
+    model = GPTLanguageModel(vocab_size,n_embd,block_size,num_heads,n_layer)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 

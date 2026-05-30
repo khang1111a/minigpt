@@ -7,7 +7,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from minigpt.model import BigramLanguageModel
+from minigpt.model import GPTLanguageModel
 from minigpt.tokenizer import CharTokenizer
 
 
@@ -22,7 +22,7 @@ checkpoint = torch.load(ckpt_path, map_location="cpu")
 
 assert tokenizer.vocab_size == checkpoint["vocab_size"]
 
-model = BigramLanguageModel(checkpoint["vocab_size"])
+model = GPTLanguageModel(checkpoint["vocab_size"])
 model.load_state_dict(checkpoint["model_state_dict"])
 model.eval()
 
