@@ -63,7 +63,18 @@ class MultiHeadAttention(nn.Module):
 
         return out
 
+class FeedForward(nn.Module):
+    def __init__(self, n_embd):
+        super().__init__()
 
+        self.net = nn.Sequential(
+            nn.Linear(n_embd, 4 * n_embd),
+            nn.ReLU(),
+            nn.Linear(4 * n_embd, n_embd),
+        )
+
+    def forward(self, x):
+        return self.net(x)
 
 class BigramLanguageModel(nn.Module):
     def __init__(self, vocab_size, n_embd, block_size, num_heads):
@@ -79,6 +90,13 @@ class BigramLanguageModel(nn.Module):
 
         # 多头注意力模块
         self.sa_head = MultiHeadAttention(n_embd, num_heads, block_size)
+        
+        # 前馈网络
+        self.ffwd = FeedForward(n_embd)
+
+        # 归一化层
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2 = nn.LayerNorm(n_embd)
 
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
@@ -92,7 +110,9 @@ class BigramLanguageModel(nn.Module):
 
         x = tok_emb + pos_emb
 
-        x = self.sa_head(x)
+        x = x + self.sa_head(self.ln1(x))
+
+        x = x + self.ffwd(self.ln2(x))
 
         logits = self.lm_head(x)
 
@@ -195,3 +215,4 @@ if __name__ == "__main__":
     print("generated shape:", generated.shape)
     print("generated ids:", generated)
     print("generated text:", tokenizer.decode(generated[0].tolist()))
+
