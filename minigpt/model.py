@@ -76,6 +76,22 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class Block(nn.Module):
+    def __init__(self, n_embd, num_heads, block_size):
+        super().__init__()
+
+        self.sa = MultiHeadAttention(n_embd, num_heads, block_size)
+        self.ffwd = FeedForward(n_embd)
+
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2 = nn.LayerNorm(n_embd)
+
+    def forward(self, x):
+        x = x + self.sa(self.ln1(x))
+        x = x + self.ffwd(self.ln2(x))
+
+        return x
+
 class BigramLanguageModel(nn.Module):
     def __init__(self, vocab_size, n_embd, block_size, num_heads):
         super().__init__()
@@ -89,14 +105,19 @@ class BigramLanguageModel(nn.Module):
         #self.sa_head = Head(n_embd, n_embd, block_size)
 
         # 多头注意力模块
-        self.sa_head = MultiHeadAttention(n_embd, num_heads, block_size)
+        #self.sa_head = MultiHeadAttention(n_embd, num_heads, block_size)
         
         # 前馈网络
-        self.ffwd = FeedForward(n_embd)
+        #self.ffwd = FeedForward(n_embd)
 
         # 归一化层
-        self.ln1 = nn.LayerNorm(n_embd)
-        self.ln2 = nn.LayerNorm(n_embd)
+        #self.ln1 = nn.LayerNorm(n_embd)
+        #self.ln2 = nn.LayerNorm(n_embd)
+
+        # transformer block
+        self.block = Block(n_embd, num_heads, block_size)
+
+        self.ln_f = nn.LayerNorm(n_embd)
 
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
@@ -110,9 +131,12 @@ class BigramLanguageModel(nn.Module):
 
         x = tok_emb + pos_emb
 
-        x = x + self.sa_head(self.ln1(x))
+        #x = x + self.sa_head(self.ln1(x))
+        #x = x + self.ffwd(self.ln2(x))
 
-        x = x + self.ffwd(self.ln2(x))
+        x = self.block(x)
+
+        x = self.ln_f(x)
 
         logits = self.lm_head(x)
 
@@ -215,4 +239,5 @@ if __name__ == "__main__":
     print("generated shape:", generated.shape)
     print("generated ids:", generated)
     print("generated text:", tokenizer.decode(generated[0].tolist()))
+
 
