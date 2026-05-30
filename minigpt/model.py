@@ -40,8 +40,33 @@ class Head(nn.Module):
 
         return out
 
+class MultiHeadAttention(nn.Module):
+    def __init__(self, n_embd, num_heads, block_size):
+        super().__init__()
+
+        head_size = n_embd // num_heads
+
+        self.heads = nn.ModuleList([
+            Head(n_embd, head_size, block_size)
+            for _ in range(num_heads)
+        ])
+        # 拼接后的结果再做一次线性变换，让不同 head 的信息充分混合
+        self.proj = nn.Linear(n_embd, n_embd)
+
+    def forward(self, x):
+        out = torch.cat([
+            head(x)
+            for head in self.heads
+        ], dim=-1)
+
+        out = self.proj(out)
+
+        return out
+
+
+
 class BigramLanguageModel(nn.Module):
-    def __init__(self, vocab_size,n_embd,block_size):
+    def __init__(self, vocab_size, n_embd, block_size, num_heads):
         super().__init__()
 
         self.block_size = block_size
@@ -50,7 +75,10 @@ class BigramLanguageModel(nn.Module):
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
 
         # 单头注意力模块
-        self.sa_head = Head(n_embd, n_embd, block_size)
+        #self.sa_head = Head(n_embd, n_embd, block_size)
+
+        # 多头注意力模块
+        self.sa_head = MultiHeadAttention(n_embd, num_heads, block_size)
 
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
@@ -134,8 +162,9 @@ if __name__ == "__main__":
     )
 
     n_embd = 32
+    num_heads = 4
 
-    model = BigramLanguageModel(vocab_size,n_embd,block_size)
+    model = BigramLanguageModel(vocab_size,n_embd,block_size,num_heads)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
@@ -166,17 +195,3 @@ if __name__ == "__main__":
     print("generated shape:", generated.shape)
     print("generated ids:", generated)
     print("generated text:", tokenizer.decode(generated[0].tolist()))
-
-    B = 4
-    T = 8
-    n_embd = 32
-    head_size = 16
-    block_size = 8
-
-    x = torch.randn(B, T, n_embd)
-
-    head = Head(n_embd, head_size, block_size)
-
-    out = head(x)
-
-    print("out shape:", out.shape)
