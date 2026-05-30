@@ -4,13 +4,26 @@ import torch.nn.functional as F
 
 
 class BigramLanguageModel(nn.Module):
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size,n_embd,block_size):
         super().__init__()
 
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+        self.block_size = block_size
+
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets = None):
-        logits = self.token_embedding_table(idx)
+        B,T = idx.shape
+
+        tok_emb = self.token_embedding_table(idx)
+
+        pos = torch.arange(T,device = idx.device)
+        pos_emb = self.position_embedding_table(pos)
+
+        x = tok_emb + pos_emb
+
+        logits = self.lm_head(x)
 
         loss = None
 
@@ -27,7 +40,9 @@ class BigramLanguageModel(nn.Module):
     @torch.no_grad()
     def generate(self, idx, max_new_tokens):
         for _ in range(max_new_tokens):
-            logits, loss = self(idx)
+            idx_cond = idx[:, -self.block_size:]
+
+            logits, loss = self(idx_cond)
 
             logits = logits[:, -1, :]
 
@@ -75,7 +90,9 @@ if __name__ == "__main__":
         block_size=block_size,
     )
 
-    model = BigramLanguageModel(vocab_size)
+    n_embd = 32
+
+    model = BigramLanguageModel(vocab_size,n_embd,block_size)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 

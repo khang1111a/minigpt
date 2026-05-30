@@ -30,7 +30,9 @@ print("vocab size:", tokenizer.vocab_size)
 batch_size = 4
 block_size = 8
 
-model = BigramLanguageModel(tokenizer.vocab_size)
+n_embd = 32
+
+model = BigramLanguageModel(tokenizer.vocab_size,n_embd)
 
 x, y = get_batch(
     split="train",
