@@ -29,11 +29,13 @@ print("vocab size:", tokenizer.vocab_size)
 
 batch_size = 4
 block_size = 8
-
 n_embd = 32
+num_heads = 4
+n_layer = 2
+dropout = 0.2
 
-model = GPTLanguageModel(tokenizer.vocab_size,n_embd)
-
+model = GPTLanguageModel(tokenizer.vocab_size, n_embd, block_size, num_heads, n_layer,dropout)
+model.train()
 x, y = get_batch(
     split="train",
     train_data=train_data,
@@ -71,7 +73,7 @@ for step in range(max_iters):
     if step % 20 == 0:
         print(f"step {step}: loss {loss.item():.4f}")
 
-
+model.eval()
 context = torch.zeros((1, 1), dtype=torch.long)
 
 generated = model.generate(context, max_new_tokens=100)
@@ -84,13 +86,17 @@ print(generated_text)
 output_dir = ROOT / "outputs"
 output_dir.mkdir(exist_ok=True)
 
-ckpt_path = output_dir / "bigram.pt"
+ckpt_path = output_dir / "gpt.pt"
 
 torch.save(
     {
         "model_state_dict": model.state_dict(),
         "vocab_size": tokenizer.vocab_size,
         "block_size": block_size,
+        "n_embd": n_embd,
+        "num_heads": num_heads,
+        "n_layer": n_layer,
+        "dropout": dropout,
     },
     ckpt_path,
 )

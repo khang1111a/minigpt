@@ -15,16 +15,26 @@ data_dir = ROOT / "data" / "tiny_text"
 output_dir = ROOT / "outputs"
 
 meta_path = data_dir / "meta.pkl"
-ckpt_path = output_dir / "bigram.pt"
+ckpt_path = output_dir / "gpt.pt"
 
 tokenizer = CharTokenizer.load(meta_path)
 checkpoint = torch.load(ckpt_path, map_location="cpu")
 
 assert tokenizer.vocab_size == checkpoint["vocab_size"]
 
-model = GPTLanguageModel(checkpoint["vocab_size"])
+model = GPTLanguageModel(
+    checkpoint["vocab_size"],
+    checkpoint["n_embd"],
+    checkpoint["block_size"],
+    checkpoint["num_heads"],
+    checkpoint["n_layer"],
+    checkpoint["dropout"],
+)
+
 model.load_state_dict(checkpoint["model_state_dict"])
 model.eval()
+
+print("model loaded successfully")
 
 context = torch.zeros((1, 1), dtype=torch.long)
 
@@ -32,4 +42,5 @@ generated = model.generate(context, max_new_tokens=100)
 
 generated_text = tokenizer.decode(generated[0].tolist())
 
+print("generated text:")
 print(generated_text)

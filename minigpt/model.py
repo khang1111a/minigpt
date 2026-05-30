@@ -3,12 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Head(nn.Module):
-    def __init__(self, n_embd, head_size, block_size):
+    def __init__(self, n_embd, head_size, block_size, dropout):
         super().__init__()
 
         self.key = nn.Linear(n_embd, head_size, bias = False)
         self.query = nn.Linear(n_embd, head_size, bias = False)
         self.value = nn.Linear(n_embd, head_size, bias = False)
+
+        self.dropout = nn.Dropout(dropout)
 
         self.register_buffer(
             "tril",
@@ -34,24 +36,25 @@ class Head(nn.Module):
         )
         
         wei = F.softmax(wei, dim=-1)
-
+        wei = self.dropout(wei)
         # 用注意力权重 wei 对 v 做加权求和
         out = wei @ v
 
         return out
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_embd, num_heads, block_size):
+    def __init__(self, n_embd, num_heads, block_size, dropout):
         super().__init__()
 
         head_size = n_embd // num_heads
 
         self.heads = nn.ModuleList([
-            Head(n_embd, head_size, block_size)
+            Head(n_embd, head_size, block_size, dropout)
             for _ in range(num_heads)
         ])
         # 拼接后的结果再做一次线性变换，让不同 head 的信息充分混合
         self.proj = nn.Linear(n_embd, n_embd)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = torch.cat([
@@ -60,28 +63,29 @@ class MultiHeadAttention(nn.Module):
         ], dim=-1)
 
         out = self.proj(out)
-
+        out = self.dropout(out)
         return out
 
 class FeedForward(nn.Module):
-    def __init__(self, n_embd):
+    def __init__(self, n_embd, dropout):
         super().__init__()
 
         self.net = nn.Sequential(
             nn.Linear(n_embd, 4 * n_embd),
             nn.ReLU(),
             nn.Linear(4 * n_embd, n_embd),
+            nn.Dropout(dropout),
         )
 
     def forward(self, x):
         return self.net(x)
 
 class Block(nn.Module):
-    def __init__(self, n_embd, num_heads, block_size):
+    def __init__(self, n_embd, num_heads, block_size, dropout):
         super().__init__()
 
-        self.sa = MultiHeadAttention(n_embd, num_heads, block_size)
-        self.ffwd = FeedForward(n_embd)
+        self.sa = MultiHeadAttention(n_embd, num_heads, block_size, dropout)
+        self.ffwd = FeedForward(n_embd, dropout)
 
         self.ln1 = nn.LayerNorm(n_embd)
         self.ln2 = nn.LayerNorm(n_embd)
@@ -93,7 +97,7 @@ class Block(nn.Module):
         return x
 
 class GPTLanguageModel(nn.Module):
-    def __init__(self, vocab_size, n_embd, block_size, num_heads, n_layer):
+    def __init__(self, vocab_size, n_embd, block_size, num_heads, n_layer, dropout):
         super().__init__()
 
         self.block_size = block_size
@@ -116,7 +120,7 @@ class GPTLanguageModel(nn.Module):
 
         # transformer block
         self.blocks = nn.Sequential(*[
-            Block(n_embd, num_heads, block_size)
+            Block(n_embd, num_heads, block_size, dropout)
             for _ in range(n_layer)
         ])
 
@@ -171,77 +175,5 @@ class GPTLanguageModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim = 1)
 
         return idx
-
-
-if __name__ == "__main__":
-    import sys
-    from pathlib import Path
-
-    import numpy as np
-
-    ROOT = Path(__file__).resolve().parents[1]
-    sys.path.append(str(ROOT))
-
-    from minigpt.dataset import get_batch
-    from minigpt.tokenizer import CharTokenizer
-
-    data_dir = ROOT / "data" / "tiny_text"
-
-    train_path = data_dir / "train.bin"
-    val_path = data_dir / "val.bin"
-    meta_path = data_dir / "meta.pkl"
-
-    train_data = np.fromfile(train_path, dtype=np.uint16)
-    val_data = np.fromfile(val_path, dtype=np.uint16)
-
-    tokenizer = CharTokenizer.load(meta_path)
-
-    vocab_size = tokenizer.vocab_size
-    batch_size = 4
-    block_size = 8
-
-    x, y = get_batch(
-        split="train",
-        train_data=train_data,
-        val_data=val_data,
-        batch_size=batch_size,
-        block_size=block_size,
-    )
-
-    n_embd = 32
-    num_heads = 4
-    n_layer = 2
-
-    model = GPTLanguageModel(vocab_size,n_embd,block_size,num_heads,n_layer)
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-
-
-    max_iters = 200
-
-    for step in range(max_iters):
-        x, y = get_batch(
-            split="train",
-            train_data=train_data,
-            val_data=val_data,
-            batch_size=batch_size,
-            block_size=block_size,
-        )
-
-        logits, loss = model(x, y)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        if step % 20 == 0:
-            print(f"step {step}: loss {loss.item():.4f}")
-    context = torch.zeros((1, 1), dtype=torch.long)
-
-    generated = model.generate(context, max_new_tokens=10)
-
-    print("generated shape:", generated.shape)
-    print("generated ids:", generated)
-    print("generated text:", tokenizer.decode(generated[0].tolist()))
 
 
