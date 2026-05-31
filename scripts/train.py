@@ -112,7 +112,38 @@ optimizer = torch.optim.AdamW(
     lr=config.learning_rate,
 )
 
+output_dir = ROOT / config.out_dir
+output_dir.mkdir(exist_ok=True)
+
+ckpt_path = output_dir / config.ckpt_name
+best_ckpt_name = getattr(
+    config,
+    "best_ckpt_name",
+    ckpt_path.with_name(f"{ckpt_path.stem}_best{ckpt_path.suffix}").name,
+)
+best_ckpt_path = output_dir / best_ckpt_name
+
 loss_history = []
+best_val_loss = float("inf")
+
+def build_checkpoint(step, best_val_loss):
+    return {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "step": step,
+        "best_val_loss": best_val_loss,
+        "vocab_size": tokenizer.vocab_size,
+        "block_size": config.block_size,
+        "n_embd": config.n_embd,
+        "num_heads": config.num_heads,
+        "n_layer": config.n_layer,
+        "dropout": config.dropout,
+        "seed": seed,
+        "dataset": config.dataset,
+        "learning_rate": config.learning_rate,
+        "batch_size": config.batch_size,
+    }
+
 for step in range(config.max_iters):
     x, y = get_batch(
         split="train",
@@ -149,6 +180,14 @@ for step in range(config.max_iters):
         else:
             print(f"step {step}: train loss {train_loss:.4f}, val loss {val_loss:.4f}")
 
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                torch.save(
+                    build_checkpoint(step, best_val_loss),
+                    best_ckpt_path,
+                )
+                print("saved best checkpoint:", best_ckpt_path)
+
 results_dir = ROOT / config.results_dir
 results_dir.mkdir(exist_ok=True)
 
@@ -169,22 +208,9 @@ with open(loss_path, "w", newline="", encoding="utf-8") as f:
 print("saved loss history:", loss_path)
 
 
-output_dir = ROOT / config.out_dir
-output_dir.mkdir(exist_ok=True)
-
-ckpt_path = output_dir / config.ckpt_name
 
 torch.save(
-    {
-        "model_state_dict": model.state_dict(),
-        "vocab_size": tokenizer.vocab_size,
-        "block_size": config.block_size,
-        "n_embd": config.n_embd,
-        "num_heads": config.num_heads,
-        "n_layer": config.n_layer,
-        "dropout": config.dropout,
-        "seed": seed,
-    },
+    build_checkpoint(config.max_iters - 1, best_val_loss),
     ckpt_path,
 )
 
