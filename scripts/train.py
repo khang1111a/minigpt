@@ -5,16 +5,29 @@ import numpy as np
 import torch
 
 import csv
-
+import argparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 from minigpt.dataset import get_batch
 from minigpt.model import GPTLanguageModel
-from minigpt.tokenizer import CharTokenizer
+from minigpt.tokenizers import load_tokenizer
 
-config_path = ROOT / "configs" / "train_char.py"
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--config",
+    type=str,
+    default="configs/train_char.py",
+)
+
+args = parser.parse_args()
+
+config_path = Path(args.config)
+
+if not config_path.is_absolute():
+    config_path = ROOT / config_path
 
 spec = importlib.util.spec_from_file_location("train_config", config_path)
 config = importlib.util.module_from_spec(spec)
@@ -29,7 +42,7 @@ meta_path = data_dir / "meta.pkl"
 train_data = np.fromfile(train_path, dtype=np.uint16)
 val_data = np.fromfile(val_path, dtype=np.uint16)
 
-tokenizer = CharTokenizer.load(meta_path)
+tokenizer = load_tokenizer(meta_path)
 
 model = GPTLanguageModel(
     tokenizer.vocab_size,
@@ -41,6 +54,45 @@ model = GPTLanguageModel(
 )
 
 model.to(config.device)
+
+@torch.no_grad()
+def estimate_loss(model, train_data, val_data, config):
+    model.eval()
+
+    out = {}
+
+    eval_iters = getattr(config, "eval_iters", 10)
+
+    for split in ["train", "val"]:
+        data = train_data if split == "train" else val_data
+
+        if len(data) <= config.block_size:
+            out[split] = None
+            continue
+
+        losses = torch.zeros(eval_iters)
+
+        for k in range(eval_iters):
+            x, y = get_batch(
+                split=split,
+                train_data=train_data,
+                val_data=val_data,
+                batch_size=config.batch_size,
+                block_size=config.block_size,
+            )
+
+            x = x.to(config.device)
+            y = y.to(config.device)
+
+            logits, loss = model(x, y)
+
+            losses[k] = loss.item()
+
+        out[split] = losses.mean().item()
+
+    model.train()
+
+    return out
 
 model.train()
 
@@ -69,10 +121,22 @@ for step in range(config.max_iters):
     optimizer.step()
 
     if step % config.eval_interval == 0:
-        loss_value = loss.item()
-        loss_history.append((step, loss_value))
+        losses = estimate_loss(
+            model=model,
+            train_data=train_data,
+            val_data=val_data,
+            config=config,
+        )
 
-        print(f"step {step}: loss {loss_value:.4f}")
+        train_loss = losses["train"]
+        val_loss = losses["val"]
+
+        loss_history.append((step, train_loss, val_loss))
+
+        if val_loss is None:
+            print(f"step {step}: train loss {train_loss:.4f}, val loss N/A")
+        else:
+            print(f"step {step}: train loss {train_loss:.4f}, val loss {val_loss:.4f}")
 
 results_dir = ROOT / config.results_dir
 results_dir.mkdir(exist_ok=True)
@@ -82,10 +146,14 @@ loss_path = results_dir / config.loss_name
 with open(loss_path, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
 
-    writer.writerow(["step", "loss"])
+    writer.writerow(["step", "train_loss", "val_loss"])
 
-    for step, loss_value in loss_history:
-        writer.writerow([step, loss_value])
+    for step, train_loss, val_loss in loss_history:
+        writer.writerow([
+            step,
+            train_loss,
+            "" if val_loss is None else val_loss,
+        ])
 
 print("saved loss history:", loss_path)
 

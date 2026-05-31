@@ -1,4 +1,4 @@
-dataset = "tiny_text_char"
+dataset = "tiny_text_byte"
 
 batch_size = 4
 block_size = 8
@@ -17,10 +17,10 @@ dropout = 0.2
 device = "cpu"
 
 out_dir = "outputs"
-ckpt_name = "gpt_char.pt"
+ckpt_name = "gpt_byte.pt"
 
 results_dir = "results"
-loss_name = "loss_char.csv"
+loss_name = "loss_byte.csv"
 
 generate_after_train = True
 max_new_tokens = 100
