@@ -22,6 +22,12 @@ parser.add_argument(
     default="configs/train_char.py",
 )
 
+parser.add_argument(
+    "--resume",
+    type=str,
+    default=None,
+)
+
 args = parser.parse_args()
 
 config_path = Path(args.config)
@@ -124,7 +130,26 @@ best_ckpt_name = getattr(
 best_ckpt_path = output_dir / best_ckpt_name
 
 loss_history = []
+start_step = 0
 best_val_loss = float("inf")
+
+if args.resume is not None:
+    resume_path = Path(args.resume)
+
+    if not resume_path.is_absolute():
+        resume_path = ROOT / resume_path
+
+    checkpoint = torch.load(resume_path, map_location=config.device)
+
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+    start_step = checkpoint["step"] + 1
+    best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+
+    print("resumed checkpoint:", resume_path)
+    print("start step:", start_step)
+    print("best val loss:", best_val_loss)
 
 def build_checkpoint(step, best_val_loss):
     return {
@@ -144,7 +169,11 @@ def build_checkpoint(step, best_val_loss):
         "batch_size": config.batch_size,
     }
 
-for step in range(config.max_iters):
+last_step = start_step - 1
+
+for step in range(start_step, config.max_iters):
+    last_step = step
+
     x, y = get_batch(
         split="train",
         train_data=train_data,
@@ -210,7 +239,7 @@ print("saved loss history:", loss_path)
 
 
 torch.save(
-    build_checkpoint(config.max_iters - 1, best_val_loss),
+    build_checkpoint(last_step, best_val_loss),
     ckpt_path,
 )
 
