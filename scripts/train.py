@@ -141,6 +141,18 @@ if args.resume is not None:
 
     checkpoint = torch.load(resume_path, map_location=config.device)
 
+    required_resume_keys = [
+        "model_state_dict",
+        "optimizer_state_dict",
+        "step",
+    ]
+
+    for key in required_resume_keys:
+        if key not in checkpoint:
+            raise KeyError(
+                f"checkpoint missing key required for resume: {key}"
+            )
+
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
