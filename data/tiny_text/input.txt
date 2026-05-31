@@ -1,2 +1,2 @@
 hello world
-this is a tiny gpt dataset
+this is a tiny gpt datase
