@@ -33,16 +33,31 @@ spec = importlib.util.spec_from_file_location("train_config", config_path)
 config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config)
 
+seed = getattr(config, "seed", 1337)
+
+torch.manual_seed(seed)
+np.random.seed(seed)
+
+seed = getattr(config, "seed", 1337)
+
+torch.manual_seed(seed)
+np.random.seed(seed)
+
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(seed)
+
 data_dir = ROOT / "data" / config.dataset
 
 train_path = data_dir / "train.bin"
 val_path = data_dir / "val.bin"
 meta_path = data_dir / "meta.pkl"
 
-train_data = np.fromfile(train_path, dtype=np.uint16)
-val_data = np.fromfile(val_path, dtype=np.uint16)
-
 tokenizer = load_tokenizer(meta_path)
+
+data_dtype = np.uint16 if tokenizer.vocab_size <= 65535 else np.uint32
+
+train_data = np.fromfile(train_path, dtype=data_dtype)
+val_data = np.fromfile(val_path, dtype=data_dtype)
 
 model = GPTLanguageModel(
     tokenizer.vocab_size,
@@ -172,6 +187,7 @@ torch.save(
         "num_heads": config.num_heads,
         "n_layer": config.n_layer,
         "dropout": config.dropout,
+        "seed": seed,
     },
     ckpt_path,
 )

@@ -14,6 +14,8 @@ num_heads = 4
 n_layer = 2
 dropout = 0.2
 
+seed = 42
+
 device = "cpu"
 
 out_dir = "outputs"

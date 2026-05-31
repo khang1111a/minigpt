@@ -47,6 +47,18 @@ def main():
         default=None,
     )
 
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="",
+    )
+    
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+    )
+
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -69,6 +81,16 @@ def main():
         ckpt_path,
         map_location=device,
     )
+
+    seed = args.seed
+
+    if seed is None:
+        seed = checkpoint.get("seed", getattr(config, "seed", 1337))
+
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
     required_keys = [
         "model_state_dict",
@@ -112,7 +134,11 @@ def main():
         else config.max_new_tokens
     )
 
-    context = torch.zeros((1, 1), dtype=torch.long, device=device)
+    if args.prompt:
+        prompt_ids = tokenizer.encode(args.prompt)
+        context = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+    else:
+        context = torch.zeros((1, 1), dtype=torch.long, device=device)
 
     generated = model.generate(
         context,
