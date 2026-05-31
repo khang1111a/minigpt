@@ -59,6 +59,12 @@ def main():
         default=None,
     )
 
+    parser.add_argument(
+    "--ckpt",
+    type=str,
+    default=None,
+)
+
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -73,7 +79,13 @@ def main():
     data_dir = ROOT / "data" / config.dataset
     meta_path = data_dir / "meta.pkl"
 
-    ckpt_path = ROOT / config.out_dir / config.ckpt_name
+    if args.ckpt is None:
+        ckpt_path = ROOT / config.out_dir / config.ckpt_name
+    else:
+        ckpt_path = Path(args.ckpt)
+
+        if not ckpt_path.is_absolute():
+            ckpt_path = ROOT / ckpt_path
 
     tokenizer = load_tokenizer(meta_path)
 
