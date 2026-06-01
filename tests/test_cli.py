@@ -15,3 +15,20 @@ def test_sample_help_includes_ckpt_option():
     )
 
     assert "--ckpt" in result.stdout
+
+def test_eval_help_includes_expected_options():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/eval.py",
+            "--help",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "--config" in result.stdout
+    assert "--ckpt" in result.stdout
+    assert "--eval-iters" in result.stdout
+    assert "--split" in result.stdout
