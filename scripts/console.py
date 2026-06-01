@@ -102,6 +102,13 @@ def main():
         default=None,
     )
 
+    parser.add_argument(
+        "--log",
+        type=str,
+        default=None,
+    )
+    
+    
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -123,6 +130,29 @@ def main():
     max_new_tokens = args.max_new_tokens
 
     history = ""
+
+    log_path = None
+
+    if args.log is not None:
+        log_path = Path(args.log)
+
+        if not log_path.is_absolute():
+            log_path = ROOT / log_path
+
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write("MiniGPT Interactive Console Log\n")
+            f.write(f"config: {config_path}\n")
+            f.write(f"checkpoint: {args.ckpt if args.ckpt is not None else config.ckpt_name}\n")
+            f.write("\n")
+    
+    def append_log(text):
+        if log_path is None:
+            return
+
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(text)
 
     print("MiniGPT Interactive Console")
     print("Type :help for commands.")
@@ -146,6 +176,7 @@ def main():
         if command == ":reset":
             history = ""
             print("context cleared")
+            append_log("[command] :reset\n\n")
             continue
 
         if command == ":show":
@@ -163,6 +194,7 @@ def main():
                 raise ValueError("temperature must be positive")
 
             print(f"temperature = {temperature}")
+            append_log(f"[command] :temp {temperature}\n\n")
             continue
 
         if command.startswith(":topk "):
@@ -174,6 +206,7 @@ def main():
                 top_k = int(value)
 
             print(f"top_k = {top_k}")
+            append_log(f"[command] :topk {top_k}\n\n")
             continue
 
         if command.startswith(":max "):
@@ -184,6 +217,7 @@ def main():
                 raise ValueError("max_new_tokens must be positive")
 
             print(f"max_new_tokens = {max_new_tokens}")
+            append_log(f"[command] :max {max_new_tokens}\n\n")
             continue
 
         prompt = history + user_input
@@ -207,6 +241,16 @@ def main():
         print()
         print(new_text)
         print()
+
+        append_log(
+            "[generation]\n"
+            f"temperature: {temperature}\n"
+            f"top_k: {top_k}\n"
+            f"max_new_tokens: {max_new_tokens}\n"
+            f"user_input:\n{user_input}\n\n"
+            f"model_output:\n{new_text}\n\n"
+        )
+
 
         history = generated_text
 

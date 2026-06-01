@@ -46,3 +46,4 @@ def test_console_help_includes_ckpt_option():
     )
 
     assert "--ckpt" in result.stdout
+    assert "--log" in result.stdout
