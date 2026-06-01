@@ -75,6 +75,7 @@ minigpt/
 ├── scripts/
 │   ├── prepare_data.py
 │   ├── train.py
+│   ├── eval.py
 │   ├── sample.py
 │   ├── console.py
 │   └── plot_loss.py
@@ -161,6 +162,13 @@ python scripts\sample.py --config configs/train_shakespeare_byte.py --prompt "RO
 
 ```powershell
 python scripts\sample.py --config configs/train_shakespeare_char.py --ckpt outputs/gpt_shakespeare_char_best.pt --prompt "ROMEO:" --temperature 0.8 --top-k 20 --max-new-tokens 500 --seed 42
+```
+
+评估 best checkpoint：
+
+```powershell
+python scripts\eval.py --config configs/train_shakespeare_char.py --ckpt outputs/gpt_shakespeare_char_best.pt --eval-iters 20
+python scripts\eval.py --config configs/train_shakespeare_byte.py --ckpt outputs/gpt_shakespeare_byte_best.pt --eval-iters 20
 ```
 
 ## Tokenizer 系统
@@ -500,6 +508,49 @@ python scripts\sample.py --config configs/train_shakespeare_char.py --ckpt outpu
 * `--top-k`：仅从概率最高的 k 个 token 中采样。
 * `--seed`：采样随机种子，用于复现实验结果。
 
+## 模型评估
+
+评估脚本为：
+
+```text
+scripts/eval.py
+```
+
+`eval.py` 用于独立评估指定 checkpoint，不依赖训练过程中的日志。它会读取配置文件中的数据集与评估参数，读取 checkpoint 中的模型结构和权重，并输出 loss 与 perplexity。
+
+评估 Shakespeare 字符级 best checkpoint：
+
+```powershell
+python scripts\eval.py --config configs/train_shakespeare_char.py --ckpt outputs/gpt_shakespeare_char_best.pt --eval-iters 20
+```
+
+评估 Shakespeare byte-level best checkpoint：
+
+```powershell
+python scripts\eval.py --config configs/train_shakespeare_byte.py --ckpt outputs/gpt_shakespeare_byte_best.pt --eval-iters 20
+```
+
+只评估验证集：
+
+```powershell
+python scripts\eval.py --config configs/train_shakespeare_char.py --ckpt outputs/gpt_shakespeare_char_best.pt --split val
+```
+
+参数说明：
+
+* `--config`：训练配置文件路径，用于确定数据集、batch size、block size、device 等评估上下文。
+* `--ckpt`：待评估的 checkpoint 路径。
+* `--eval-iters`：评估 batch 数；不传时使用配置文件中的 `eval_iters`。
+* `--split`：评估数据切分，可选 `train`、`val` 或 `both`。
+
+perplexity 由 loss 计算得到：
+
+```python
+perplexity = exp(loss)
+```
+
+loss 和 perplexity 都是越低越好。perplexity 可以理解为模型平均在多少个候选 token 之间困惑，是语言模型常用的可比较指标。
+
 ## Loss 曲线绘制
 
 绘制字符级模型 loss 曲线：
@@ -543,14 +594,14 @@ step,loss
 
 当前仓库已经完成 tiny_text debug 闭环，以及 tiny Shakespeare 上的 char / byte tokenizer 对比实验。
 
-| 数据集 | tokenizer | vocab size | train tokens | val tokens | 配置文件 | step 400 val loss |
-| --- | ---: | ---: | ---: | ---: | --- | ---: |
-| tiny_text | char | 17 | 34 | 4 | `configs/train_char.py` | N/A |
-| tiny_text | byte | 256 | 34 | 4 | `configs/train_byte.py` | N/A |
-| shakespeare | char | 65 | 1,003,854 | 111,540 | `configs/train_shakespeare_char.py` | 2.2018 |
-| shakespeare | byte | 256 | 1,003,854 | 111,540 | `configs/train_shakespeare_byte.py` | 2.2388 |
+| 数据集 | tokenizer | vocab size | train tokens | val tokens | 配置文件 | best checkpoint val loss | best checkpoint val perplexity |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| tiny_text | char | 17 | 34 | 4 | `configs/train_char.py` | N/A | N/A |
+| tiny_text | byte | 256 | 34 | 4 | `configs/train_byte.py` | N/A | N/A |
+| shakespeare | char | 65 | 1,003,854 | 111,540 | `configs/train_shakespeare_char.py` | 2.1913 | 8.9473 |
+| shakespeare | byte | 256 | 1,003,854 | 111,540 | `configs/train_shakespeare_byte.py` | 2.2431 | 9.4223 |
 
-`tiny_text` 的验证集太短，主要用于快速检查 tokenizer、dataset、model、train、sample 是否能跑通。Shakespeare 实验使用相同模型规模训练 500 step，每 100 step 记录一次 train / validation loss；当前结果说明 char 与 byte 两条 tokenizer 管线都能完整训练、生成和绘图。
+`tiny_text` 的验证集太短，主要用于快速检查 tokenizer、dataset、model、train、sample 是否能跑通。Shakespeare 实验使用相同模型规模训练 500 step，每 100 step 记录一次 train / validation loss，并通过 `scripts/eval.py` 对 best checkpoint 进行独立评估；当前结果说明 char 与 byte 两条 tokenizer 管线都能完整训练、恢复、评估、生成和绘图。
 
 500 step 仍然是短训，生成文本通常会出现英文形状、换行和角色台词格式，但还会包含大量伪词。若要提升生成质量，可以增加 `max_iters`，或后续接入更大的模型与更长训练。
 
@@ -563,7 +614,7 @@ step,loss
 | v0.2 基础稳定 | 已完成 | 稳定最小训练闭环，降低后续迭代风险 | `.gitignore`、pytest 测试、tokenizer round-trip 测试、数据预处理 smoke test、训练脚本清理 |
 | 多数据集支持 | 已完成 | 将项目从 tiny_text debug 数据扩展到真实小语料实验 | tiny Shakespeare 数据接入、char / byte 数据预处理、两组训练配置、loss CSV 与曲线产物 |
 | 训练工程化 | 基本完成 | 提升训练过程的可恢复性和实验可追踪性 | best checkpoint、checkpoint metadata、`sample.py --ckpt`、`train.py --resume` |
-| 评估与实验对比 | 下一阶段 | 建立统一评估入口，支持不同 tokenizer 与 checkpoint 的量化比较 | `scripts/eval.py`、validation loss、perplexity、char vs byte 对比表、README 实验结果更新 |
+| 评估与实验对比 | 进行中 | 建立统一评估入口，支持不同 tokenizer 与 checkpoint 的量化比较 | `scripts/eval.py`、validation loss、perplexity、char vs byte 对比表、README 实验结果更新 |
 | 交互生成增强 | 规划中 | 提升模型演示和人工观察效率 | `scripts/console.py` 支持 checkpoint 选择、生成参数展示、生成日志保存 |
 | Simple BPE tokenizer | 规划中 | 支持子词级 tokenizer 实验，补齐 char / byte / BPE 对比链路 | 简化 BPE 训练、merges 持久化、encode/decode、数据预处理集成、基础测试 |
 | LoRA / Adaptive LoRA | 后续阶段 | 在稳定训练与评估体系上开展参数高效微调实验 | LoRA 模块、rank 配置、full fine-tune vs LoRA 对比、adaptive rank 实验记录 |
@@ -571,10 +622,10 @@ step,loss
 近期优先级：
 
 ```text
-1. 提交 checkpoint / resume 相关 README 更新。
-2. 实现 scripts/eval.py，支持通过 config + checkpoint 计算 validation loss 与 perplexity。
-3. 使用 eval.py 重新评估 shakespeare_char 与 shakespeare_byte，并更新实验结果表。
-4. 增强 scripts/console.py，使其支持 best checkpoint 和生成日志记录。
+1. 提交 README 中的 checkpoint / resume / eval 文档更新。
+2. 增强 scripts/console.py，使其支持 best checkpoint 和生成日志记录。
+3. 为 eval.py 增加 CSV / JSON 输出，便于后续批量实验汇总。
+4. 在评估链路稳定后，推进 Simple BPE tokenizer。
 ```
 
 
