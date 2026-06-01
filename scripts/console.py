@@ -20,11 +20,17 @@ def load_config(config_path):
     return config
 
 
-def load_model_and_tokenizer(config, device):
+def load_model_and_tokenizer(config, device, ckpt_path=None):
     data_dir = ROOT / "data" / config.dataset
     meta_path = data_dir / "meta.pkl"
 
-    ckpt_path = ROOT / config.out_dir / config.ckpt_name
+    if ckpt_path is None:
+        ckpt_path = ROOT / config.out_dir / config.ckpt_name
+    else:
+        ckpt_path = Path(ckpt_path)
+
+        if not ckpt_path.is_absolute():
+            ckpt_path = ROOT / ckpt_path
 
     tokenizer = load_tokenizer(meta_path)
 
@@ -90,6 +96,12 @@ def main():
         default=200,
     )
 
+    parser.add_argument(
+        "--ckpt",
+        type=str,
+        default=None,
+    )
+
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -100,7 +112,11 @@ def main():
     config = load_config(config_path)
 
     device = config.device
-    model, tokenizer = load_model_and_tokenizer(config, device)
+    model, tokenizer = load_model_and_tokenizer(
+        config,
+        device,
+        ckpt_path=args.ckpt,
+    )
 
     temperature = args.temperature
     top_k = args.top_k

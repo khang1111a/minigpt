@@ -32,3 +32,17 @@ def test_eval_help_includes_expected_options():
     assert "--ckpt" in result.stdout
     assert "--eval-iters" in result.stdout
     assert "--split" in result.stdout
+
+def test_console_help_includes_ckpt_option():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/console.py",
+            "--help",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "--ckpt" in result.stdout
