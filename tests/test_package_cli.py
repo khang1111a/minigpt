@@ -26,8 +26,8 @@ def test_minigpt_help_includes_commands():
     ("command", "expected_flags"),
     [
         ("prepare", ["--input", "--out", "--tokenizer"]),
-        ("train", ["--config", "--resume"]),
-        ("eval", ["--config", "--ckpt", "--eval-iters", "--split"]),
+        ("train", ["--config", "--resume", "--run-id", "--runs-dir"]),
+        ("eval", ["--config", "--ckpt", "--eval-iters", "--split", "--out", "--csv"]),
         ("sample", ["--config", "--prompt", "--ckpt", "--temperature", "--top-k"]),
         ("console", ["--config", "--ckpt", "--log"]),
         ("plot", ["--loss", "--out"]),

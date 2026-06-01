@@ -7,25 +7,41 @@ import torch
 import csv
 import argparse
 
+from datetime import datetime, timezone
+
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 from minigpt.dataset import get_batch
 from minigpt.model import GPTLanguageModel
 from minigpt.tokenizers import load_tokenizer
+from minigpt.runs import init_run, update_metadata
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--config",
-    type=str,
-    default="configs/train_char.py",
+    type = str,
+    default = "configs/train_char.py",
 )
 
 parser.add_argument(
     "--resume",
-    type=str,
-    default=None,
+    type = str,
+    default = None,
+)
+
+parser.add_argument(
+    "--run-id",
+    type = str,
+    default = None,
+)
+
+parser.add_argument(
+    "--runs-dir",
+    type = str,
+    default = "runs",
 )
 
 args = parser.parse_args()
@@ -38,6 +54,22 @@ if not config_path.is_absolute():
 spec = importlib.util.spec_from_file_location("train_config", config_path)
 config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config)
+
+run = None
+
+if args.run_id is not None:
+    run = init_run(
+        config_path=config_path,
+        runs_dir=ROOT / args.runs_dir,
+        run_id=args.run_id,
+        metadata={
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "config": str(config_path),
+            "command": "train",
+        },
+    )
+
+    print("run dir:", run["run_dir"])
 
 seed = getattr(config, "seed", 1337)
 
@@ -118,8 +150,15 @@ optimizer = torch.optim.AdamW(
     lr=config.learning_rate,
 )
 
-output_dir = ROOT / config.out_dir
-output_dir.mkdir(exist_ok=True)
+if run is None:
+    output_dir = ROOT / config.out_dir
+    results_dir = ROOT / config.results_dir
+else:
+    output_dir = run["checkpoints_dir"]
+    results_dir = run["metrics_dir"]
+
+output_dir.mkdir(parents=True, exist_ok=True)
+results_dir.mkdir(parents=True, exist_ok=True)
 
 ckpt_path = output_dir / config.ckpt_name
 best_ckpt_name = getattr(
@@ -229,9 +268,6 @@ for step in range(start_step, config.max_iters):
                 )
                 print("saved best checkpoint:", best_ckpt_path)
 
-results_dir = ROOT / config.results_dir
-results_dir.mkdir(exist_ok=True)
-
 loss_path = results_dir / config.loss_name
 
 with open(loss_path, "w", newline="", encoding="utf-8") as f:
@@ -257,6 +293,23 @@ torch.save(
 
 print("saved checkpoint:", ckpt_path)
 
+if run is not None:
+    update_metadata(
+        run["run_dir"],
+        {
+            "status": "completed",
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "dataset": config.dataset,
+            "device": config.device,
+            "seed": seed,
+            "max_iters": config.max_iters,
+            "last_step": last_step,
+            "best_val_loss": None if best_val_loss == float("inf") else best_val_loss,
+            "checkpoint_path": str(ckpt_path),
+            "best_checkpoint_path": str(best_ckpt_path),
+            "loss_path": str(loss_path),
+        },
+    )
 
 if config.generate_after_train:
     model.eval()

@@ -487,6 +487,38 @@ batch_size
 
 其中 `outputs/<name>.pt` 是 latest/final checkpoint，`outputs/<name>_best.pt` 是验证集 loss 最低时保存的 best checkpoint。
 
+### 实验目录
+
+训练命令支持通过 `--run-id` 将一次实验写入独立目录：
+
+```powershell
+python -m minigpt train --config configs/train_char.py --run-id debug-char
+```
+
+输出结构如下：
+
+```text
+runs/debug-char/
+├── config.py
+├── metadata.json
+├── checkpoints/
+│   ├── gpt_char.pt
+│   └── gpt_char_best.pt
+├── metrics/
+│   └── loss_char.csv
+└── samples/
+```
+
+其中：
+
+* `config.py` 是训练配置快照。
+* `metadata.json` 记录 run id、创建时间、数据集、设备、seed、训练步数、checkpoint 路径和 loss 路径。
+* `checkpoints/` 保存当前 run 的模型权重。
+* `metrics/` 保存当前 run 的 loss CSV。
+* `samples/` 预留给后续生成样例。
+
+如果不传 `--run-id`，训练仍然沿用旧行为，将 checkpoint 写入 `outputs/`，将 loss 写入 `results/`。
+
 ### 断点续训
 
 训练脚本支持从新格式 checkpoint 恢复训练：
@@ -613,12 +645,32 @@ python -m minigpt eval --config configs/train_shakespeare_byte.py --ckpt outputs
 python -m minigpt eval --config configs/train_shakespeare_char.py --ckpt outputs/gpt_shakespeare_char_best.pt --split val
 ```
 
+保存 JSON 评估结果：
+
+```powershell
+python -m minigpt eval --config configs/train_shakespeare_char.py --ckpt outputs/gpt_shakespeare_char_best.pt --out results/eval_shakespeare_char.json
+```
+
+保存 CSV 评估结果：
+
+```powershell
+python -m minigpt eval --config configs/train_shakespeare_char.py --ckpt outputs/gpt_shakespeare_char_best.pt --csv results/eval_shakespeare_char.csv
+```
+
+JSON 输出会记录 checkpoint、config、dataset、device、eval_iters，以及每个 split 的 loss 和 perplexity。CSV 输出使用一行表示一个 split，字段为：
+
+```csv
+checkpoint,dataset,device,eval_iters,split,loss,perplexity
+```
+
 参数说明：
 
 * `--config`：训练配置文件路径，用于确定数据集、batch size、block size、device 等评估上下文。
 * `--ckpt`：待评估的 checkpoint 路径。
 * `--eval-iters`：评估 batch 数；不传时使用配置文件中的 `eval_iters`。
 * `--split`：评估数据切分，可选 `train`、`val` 或 `both`。
+* `--out`：可选 JSON 输出路径，用于保存结构化评估结果。
+* `--csv`：可选 CSV 输出路径，用于保存可汇总的评估结果表。
 
 perplexity 由 loss 计算得到：
 

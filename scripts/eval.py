@@ -1,5 +1,7 @@
 import argparse
+import csv
 import importlib.util
+import json
 import math
 import sys
 from pathlib import Path
@@ -20,6 +22,63 @@ def load_config(config_path):
     config = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(config)
     return config
+
+
+def resolve_output_path(path):
+    output_path = Path(path)
+
+    if not output_path.is_absolute():
+        output_path = ROOT / output_path
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    return output_path
+
+
+def write_json_result(path, result):
+    output_path = resolve_output_path(path)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, sort_keys=True)
+
+    return output_path
+
+
+def write_csv_result(path, result):
+    output_path = resolve_output_path(path)
+
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "checkpoint",
+                "dataset",
+                "device",
+                "eval_iters",
+                "split",
+                "loss",
+                "perplexity",
+            ],
+        )
+        writer.writeheader()
+
+        for split, metrics in result["splits"].items():
+            loss = metrics["loss"]
+            perplexity = metrics["perplexity"]
+
+            writer.writerow(
+                {
+                    "checkpoint": result["checkpoint"],
+                    "dataset": result["dataset"],
+                    "device": result["device"],
+                    "eval_iters": result["eval_iters"],
+                    "split": split,
+                    "loss": "" if loss is None else loss,
+                    "perplexity": "" if perplexity is None else perplexity,
+                }
+            )
+
+    return output_path
 
 
 @torch.no_grad()
@@ -77,6 +136,20 @@ def main():
         type=str,
         choices=["train", "val", "both"],
         default="both",
+    )
+
+    parser.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help="Optional JSON output path for evaluation results.",
+    )
+
+    parser.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Optional CSV output path for evaluation results.",
     )
 
     args = parser.parse_args()
@@ -157,6 +230,15 @@ def main():
     print(f"device: {config.device}")
     print(f"eval_iters: {eval_iters}")
 
+    result = {
+        "checkpoint": str(ckpt_path),
+        "config": str(config_path),
+        "dataset": config.dataset,
+        "device": config.device,
+        "eval_iters": eval_iters,
+        "splits": {},
+    }
+
     for split in splits:
         loss = estimate_split_loss(
             model=model,
@@ -170,12 +252,28 @@ def main():
         if loss is None:
             print(f"{split}_loss: N/A")
             print(f"{split}_perplexity: N/A")
+            result["splits"][split] = {
+                "loss": None,
+                "perplexity": None,
+            }
             continue
 
         perplexity = math.exp(loss)
+        result["splits"][split] = {
+            "loss": loss,
+            "perplexity": perplexity,
+        }
 
         print(f"{split}_loss: {loss:.4f}")
         print(f"{split}_perplexity: {perplexity:.4f}")
+
+    if args.out is not None:
+        json_path = write_json_result(args.out, result)
+        print(f"saved eval json: {json_path}")
+
+    if args.csv is not None:
+        csv_path = write_csv_result(args.csv, result)
+        print(f"saved eval csv: {csv_path}")
 
 
 if __name__ == "__main__":
